@@ -81,6 +81,7 @@ def signup():
         else:
             # Creating the account details in firebase
             userAccounts.document(getMobileNo).set(data)
+            userCatches.document(getMobileNo).set(None)
             response = jsonify({"success":True})
             return response
     except Exception as e:
@@ -103,7 +104,7 @@ def getChart1():
         dataDict = {}
         for data1 in data:
             data1 = data1.to_dict()
-            month = int(data1['date'].split("/")[1])
+            month = int(data1['date'].split("-")[1])
             count = 0
             for i in data1['catches']:
                 count += int(i['quantity'])
@@ -112,8 +113,18 @@ def getChart1():
                 dataDict[month] = dataDict[month] + count
             else:
                 dataDict[month] = count
+        plt.bar(list(dataDict.keys()), dataDict.values(), color='g')
+        plt.xlabel('Months')
+        plt.ylabel('No of Catches')
+        plt.title('Month Vs No of catches caught')
+        a = 'temp'+ ''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]) +'.png'
+        imageTempPath = BASE_PATH + a
+        plt.savefig(imageTempPath)
+        storage.child('charts/{}'.format(a)).put(imageTempPath)
+        chartUrl = storage.child('charts/{}'.format(a)).get_url(None)
+        print(chartUrl)
+        return jsonify({'chartUrl':chartUrl,'average':res,'moneySaved':res*2})
 
-        return jsonify({'data':dataDict})
     except Exception as e:
         return f"An Error Occured", 500
 
@@ -133,15 +144,25 @@ def getChart2():
         dataDict = {}
         for data1 in data:
             data1 = data1.to_dict()
-            month = int(data1['date'].split("/")[1])
+            month = int(data1['date'].split("-")[1])
             weight = data1['totalWeight']
             if month in dataDict:
                 dataDict[month] = dataDict[month] + weight
             else:
                 dataDict[month] = weight
-
-        return jsonify({'data':dataDict})
+        plt.bar(list(dataDict.keys()), dataDict.values(), color='g')
+        plt.xlabel('Month')
+        plt.ylabel('Weight of catch caught')
+        a = 'temp'+ ''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]) +'.png'
+        imageTempPath = BASE_PATH + a
+        plt.title('Month vs Weight of catch caught')
+        plt.savefig(imageTempPath)
+        storage.child('charts/{}'.format(a)).put(imageTempPath)
+        chartUrl = storage.child('charts/{}'.format(a)).get_url(None)
+        print(chartUrl)
+        return jsonify({'chartUrl':chartUrl})
     except Exception as e:
+        print(e)
         return f"An Error Occured", 500
 
 '''
@@ -158,7 +179,7 @@ def getChart3():
         for data1 in data:
             data1 = data1.to_dict()
             print(data1)
-            month = int(data1['date'].split("/")[1])
+            month = int(data1['date'].split("-")[1])
             weight = data1['totalWeight']
             hours = data1['hours']
             CPUE = weight/hours
@@ -174,8 +195,17 @@ def getChart3():
         ans = {}
         for i in dataDict.keys():
             ans[i] = dataDict[i]/monthCountDict[i]
-        
-        return jsonify({'data':ans})
+        plt.bar(list(ans.keys()), ans.values(), color='g')
+        plt.xlabel('Months')
+        plt.ylabel('CPUE(weight of catch/hour)')
+        a = 'temp'+ ''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]) +'.png'
+        imageTempPath = BASE_PATH + a
+        plt.savefig(imageTempPath)
+        plt.title("Month Vs CPUE")
+        storage.child('charts/{}'.format(a)).put(imageTempPath)
+        chartUrl = storage.child('charts/{}'.format(a)).get_url(None)
+        print(chartUrl)
+        return jsonify({'chartUrl':chartUrl,})
     except Exception as e:
         return f"An Error Occured", 500        
 
@@ -197,7 +227,7 @@ def getChart4():
 
             hours = float(i['hours'])
             weight = float(i['weight'])
-            month = int(i['date'].split("/")[1])
+            month = int(i['date'].split("-")[1])
             print(month)
             CPUE = weight/hours
             print(CPUE)
@@ -222,13 +252,16 @@ def getChart4():
         # This is the average weight/hour.
         # Money saved is random.
         res = total/len(ans)
+        print(str(ans.keys())+" "+str(ans.values())+"hi")
         plt.bar(list(ans.keys()), ans.values(), color='g')
+        plt.title("Month Vs CPUE - For Fisherman")
         plt.xlabel('Months')
         plt.ylabel('CPUE(weight of catch/hour)')
-        imageTempPath = BASE_PATH +'temp.png'
+        a = 'temp'+ ''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]) +'.png'
+        imageTempPath = BASE_PATH + a
         plt.savefig(imageTempPath)
-        storage.child('charts/{}'.format('temp.png')).put(imageTempPath)
-        chartUrl = storage.child('charts/{}'.format('temp.png')).get_url(None)
+        storage.child('charts/{}'.format(a)).put(imageTempPath)
+        chartUrl = storage.child('charts/{}'.format(a)).get_url(None)
         print(chartUrl)
         return jsonify({'chartUrl':chartUrl,'average':res,'moneySaved':res*2})
     except Exception as e:
@@ -334,7 +367,16 @@ def updateCatch():
         
         storage.child('fishes/{}'.format(data['imageFileName'])).put(imagePath)
         fish_url = storage.child('fishes/{}'.format(data['imageFileName'])).get_url(None)
+        # The url of the image sent from app
         print(fish_url)
+        request_url = 'http://35.240.219.8:8080/register?key='+fish_url
+        print(request_url)
+        try:
+            predictedData = requests.get(request_url).json()
+        except Exception as e:
+            print(e)
+        print(predictedData)
+        temp = int(''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]))
         data2 = {
             'date':data['date'],
             'description':data['description'],
@@ -342,10 +384,12 @@ def updateCatch():
             'hours':float(data['hours']),
             'latitude':float(data['latitude']),
             'longitude':float(data['longitude']),
-            'name':data['name'],
+            'name':data['name'] + " "+ str(temp),
             'weight':float(data['weight']),
             'number':data['number'],
-            'catchId': int(''.join([str(random.randint(0, 999)).zfill(3) for _ in range(2)]))
+            'catchId': temp,
+            'catches':predictedData['fishData'],
+            'boundedImageUrl':predictedData['boundedUrl']
         }
         ref = userCatches.document(str(data['number']))
         ref.update({u'catches': firestore.ArrayUnion([data2])})
@@ -357,38 +401,15 @@ def updateCatch():
             'date':data2['date'],
             'catchId':data2['catchId'],
             'hours':data2['hours'],
-            'catches':[
-                {
-                    'cost':200,
-                    'fishType':'Shark',
-                    'weight':50,
-                    'quantity':10
-                },
-                            {
-                    'cost':200,
-                    'fishType':'Whale',
-                    'weight':50,
-                    'quantity':10
-                },
-                            {
-                    'cost':200,
-                    'fishType':'Dolphin',
-                    'weight':50,
-                    'quantity':10
-                },
-                {
-                    'cost':200,
-                    'fishType':'Bluefish',
-                    'weight':50,
-                    'quantity':10
-                }
-            ]
+            'catches':predictedData['fishData'],
+            'boundedImageUrl':predictedData['boundedUrl']
         }
         print(data1)
         fishData.document(str(data1['catchId'])).set(data1)
         return jsonify({"success":True})
     
     except Exception as e:
+        print(e)
         return jsonify({"success":False}), 400
 
 
@@ -421,4 +442,4 @@ def login():
         return f"An error Occured: {e}",400
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port="8080")
+    app.run(debug=True)
